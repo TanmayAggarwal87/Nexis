@@ -1,6 +1,8 @@
 import { CloudUpload, Download, File, LogOut, Users, X } from "lucide-react";
 import { useDropzone } from "react-dropzone";
 import React from "react";
+import { useSessionStore } from "../store/useShareAuth";
+
 
 function FileSharing() {
   const { getRootProps, getInputProps, isDragActive, acceptedFiles } =
@@ -9,6 +11,11 @@ function FileSharing() {
         console.log(acceptedFiles);
       },
     });
+
+    const {connectUser,sessionId,closeSession,userConnected} = useSessionStore()
+    console.log(sessionId,userConnected)
+    
+
 
   return (
     <div>
@@ -39,7 +46,7 @@ function FileSharing() {
               • Connected
             </div>
             <p className="text-[10px] sm:text-xs text-gray-400 tracking-widest">
-              • NEXIS-7429
+              • {sessionId}
             </p>
           </div>
         </div>
@@ -55,6 +62,7 @@ function FileSharing() {
           </div>
 
           <button
+            onClick={()=>{closeSession()}}
             className="flex justify-center items-center flex-row gap-1 text-xs sm:text-sm 
                  px-2 py-1 border border-gray-400 rounded-lg cursor-pointer"
           >

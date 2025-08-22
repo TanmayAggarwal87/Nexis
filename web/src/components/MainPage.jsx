@@ -1,8 +1,34 @@
 import { ArrowRight, X } from "lucide-react";
 import React from "react";
-import {QRCodeSVG} from 'qrcode.react';
+import { QRCodeSVG } from "qrcode.react";
+import { axiosInstance } from "../libs/axios";
+import { useSessionStore } from "../store/useShareAuth.js";
+import { useEffect, useState } from "react";
 
 function MainPage() {
+  const { connectUser, sessionId, joinSession, userConnected } =useSessionStore();
+  
+
+  const [Id, setId] = useState("");
+
+
+  function handleSession(e) {
+    e.preventDefault();
+    joinSession(Id);
+  }
+  useEffect(() => {
+    const savedSession = localStorage.getItem("sessionId");
+    connectUser()
+    if (savedSession) {
+      // Only join if we're not already connected
+      if (!userConnected) {
+        joinSession(Id);
+      }
+    } else {
+      connectUser();
+    }
+  }, [connectUser, joinSession, userConnected]);
+
   return (
     <div className="flex justify-center items-center  flex-col gap-2 max-w-screen px-2">
       <div className="text-center space-y-4 mt-10">
@@ -22,13 +48,16 @@ function MainPage() {
 
       <div className="flex justify-center items-center  flex-col gap-2">
         <div id="qr" className="w-50  h-50 bg-black rounded-xl">
-          <QRCodeSVG value="https://todo-share.onrender.com/" className="h-full w-full rounded-xl" />
+          <QRCodeSVG
+            value={`http://localhost:4000/join/${sessionId}`}
+            className="h-full w-full rounded-xl"
+          />
         </div>
 
         <div className="max-w-screen mx-2 w-[500px] flex justify-center items-center flex-col gap-3 uppercase font-sans">
           <p className="text-gray-500 font-xl mt-2">Your Connection code</p>
           <div className=" w-full flex justify-center items-center   rounded-lg font-semibold tracking-widest text-xl py-2 border-2 border-gray-500">
-            <p>NEXIS-7429</p>
+            <p>{sessionId}</p>
           </div>
         </div>
 
@@ -45,22 +74,29 @@ function MainPage() {
           </p>
 
           {/* Input + Button */}
-          <div className="flex items-center mt-4">
+          <form
+            type="submit"
+            className="flex items-center mt-4"
+            onSubmit={handleSession}
+          >
             <input
               type="text"
+              value={Id}
+              onChange={(e) => setId(e.target.value)}
               placeholder="Enter connection code or scan QR"
               className="flex-1 h-14 px-4 rounded-lg border border-gray-200 shadow-sm 
                      focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 
                      text-gray-700 placeholder-gray-400 text-sm tracking-wide"
             />
             <button
+              type="submit"
               className="ml-3 h-14 w-14 flex items-center justify-center rounded-lg 
                      bg-indigo-500 hover:bg-indigo-500 text-white shadow-md 
                      transition-all duration-200 cursor-pointer"
             >
               <ArrowRight className="w-5 h-5" />
             </button>
-          </div>
+          </form>
         </div>
       </div>
     </div>
