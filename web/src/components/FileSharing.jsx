@@ -104,7 +104,6 @@ function FileSharing() {
             </span>
             <input
               {...getInputProps()}
-              id="file-upload"
               type="file"
               className="hidden"
             />
