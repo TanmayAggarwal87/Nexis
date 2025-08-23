@@ -12,8 +12,7 @@ function App() {
   return (
     <div>
       <Routes>
-      <Route path="/" element={<MainPage />} />
-      <Route path = {`session/:id` }element={<FileSharing/>}/>
+      <Route path="/" element={!userConnected ? <MainPage /> : <FileSharing />} />
         
         
 

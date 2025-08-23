@@ -16,7 +16,6 @@ function MainPage() {
   function handleSession(e) {
     e.preventDefault();
     joinSession(Id);
-    navigate(`/session/${Id}`);
   }
   useEffect(() => {
     const savedSession = localStorage.getItem("sessionId");
