@@ -7,12 +7,15 @@ import { useSessionStore } from './store/useShareAuth'
 import { Route, Routes } from 'react-router-dom'
 
 function App() {
-  const {userConnected} = useSessionStore()
+  const {userConnected,sessionId} = useSessionStore()
 
   return (
     <div>
       <Routes>
-        <Route path="/" element={!userConnected ? <MainPage /> : <FileSharing />} />
+      <Route path="/" element={<MainPage />} />
+      <Route path = {`session/:id` }element={<FileSharing/>}/>
+        
+        
 
       </Routes>
       

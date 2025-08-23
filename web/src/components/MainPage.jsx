@@ -4,10 +4,11 @@ import { QRCodeSVG } from "qrcode.react";
 import { axiosInstance } from "../libs/axios";
 import { useSessionStore } from "../store/useShareAuth.js";
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 function MainPage() {
   const { connectUser, sessionId, joinSession, userConnected } =useSessionStore();
-  
+  const navigate = useNavigate()
 
   const [Id, setId] = useState("");
 
@@ -15,6 +16,7 @@ function MainPage() {
   function handleSession(e) {
     e.preventDefault();
     joinSession(Id);
+    navigate(`/session/${Id}`);
   }
   useEffect(() => {
     const savedSession = localStorage.getItem("sessionId");
@@ -48,7 +50,8 @@ function MainPage() {
       <div className="flex justify-center items-center  flex-col gap-2">
         <div id="qr" className="w-50  h-50 bg-black rounded-xl">
           <QRCodeSVG
-            value={`https://nexis-share.netlify.app/join/${sessionId}`}
+        
+            value={`https://nexis-share.netlify.app/session/${sessionId}`}
             className="h-full w-full rounded-xl"
           />
         </div>

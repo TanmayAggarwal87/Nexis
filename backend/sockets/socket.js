@@ -7,7 +7,7 @@ export const server = http.createServer(app);
 
 export const io = new Server(server, {
   cors: {
-    origin: "https://nexis-share.netlify.app", //url update
+    origin: "https://nexis-share.netlify.app",
     methods: ["GET", "POST"],
     credentials: true,
   },
