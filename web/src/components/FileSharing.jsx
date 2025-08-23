@@ -94,7 +94,6 @@ function FileSharing() {
         <div>
           <label
             {...getRootProps()}
-            htmlFor="file-upload"
             className="flex flex-col items-center justify-center h-[300px] w-full p-8 bg-white border-2 border-dashed border-gray-400 rounded-2xl cursor-pointer hover:border-gray-600 transition"
           >
             <CloudUpload className="w-12 h-12 text-gray-600 mb-3" />
