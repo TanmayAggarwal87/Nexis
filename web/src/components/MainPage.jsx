@@ -49,8 +49,8 @@ function MainPage() {
       <div className="flex justify-center items-center  flex-col gap-2">
         <div id="qr" className="w-50  h-50 bg-black rounded-xl">
           <QRCodeSVG
-        
-            value={`https://nexis-share.netlify.app/session/${sessionId}`}
+
+            value={`https://nexis-share.netlify.app/`}
             className="h-full w-full rounded-xl"
           />
         </div>
