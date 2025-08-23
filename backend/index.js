@@ -5,7 +5,7 @@ import cors from "cors";
 
 
 app.use(cors({
-  origin: "http://localhost:5173",//url update
+  origin: "https://nexis-share.netlify.app",//url update
   credentials: true
 }));
 
