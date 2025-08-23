@@ -1,21 +1,37 @@
 import { CloudUpload, Download, File, LogOut, Users, X } from "lucide-react";
 import { useDropzone } from "react-dropzone";
-import React from "react";
+import { Socket } from "socket.io-client";
+import React, { useState } from "react";
 import { useSessionStore } from "../store/useShareAuth";
 
 
 function FileSharing() {
-  const { getRootProps, getInputProps, isDragActive, acceptedFiles } =
-    useDropzone({
+  
+   const { connectUser, sessionId, closeSession, userConnected, files, incomingFiles, socket, sendFiles } = useSessionStore();
+
+
+
+    const { getRootProps, getInputProps, isDragActive, acceptedFiles } =
+    useDropzone({ 
       onDrop: (acceptedFiles) => {
-        console.log(acceptedFiles);
+        sendFiles(acceptedFiles);
       },
     });
 
-    const {connectUser,sessionId,closeSession,userConnected} = useSessionStore()
-    console.log(sessionId,userConnected)
-    
+  const downloadFile = (file) => {
+    const url = URL.createObjectURL(file);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = file.name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
+
+
+    
 
   return (
     <div>
@@ -84,7 +100,7 @@ function FileSharing() {
             <CloudUpload className="w-12 h-12 text-gray-600 mb-3" />
             <span className="text-gray-700 font-medium">
               {isDragActive
-                ? "Drop the files here..."
+                ? "Drop it Like its Hot"
                 : "Drag & drop files here, or click to select"}
             </span>
             <input
@@ -107,10 +123,62 @@ function FileSharing() {
         </div>
 
         {/* Files Received Section */}
-        <label className="flex flex-col items-center justify-center h-[300px] w-full p-8 bg-white border-2 border-dashed border-gray-400 rounded-2xl cursor-pointer hover:border-gray-600 transition">
-          <Download className="w-12 h-12 text-gray-600 mb-3" />
-          <p className="text-gray-700 font-medium">View Files Received</p>
-        </label>
+
+
+        <div className="flex flex-col">
+          <label className="flex flex-col items-center justify-center min-h-[300px] w-full p-8 bg-white border-2 border-dashed border-gray-400 rounded-2xl cursor-pointer hover:border-gray-600 transition">
+            <Download className="w-12 h-12 text-gray-600 mb-3" />
+            <p className="text-gray-700 font-medium">Files Received</p>
+            
+            {/* Display incoming file progress */}
+            {Object.keys(incomingFiles).length > 0 && (
+              <div className="w-full mt-4">
+                <p className="text-sm font-medium text-gray-700 mb-2">Incoming Files:</p>
+                {Object.entries(incomingFiles).map(([fileName, fileInfo]) => (
+                  <div key={fileName} className="mb-2">
+                    <div className="flex justify-between items-center text-xs text-gray-600">
+                      <span>{fileName}</span>
+                      <span>{Math.round((fileInfo.receivedChunks / fileInfo.totalChunks) * 100)}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className="bg-blue-600 h-2 rounded-full" 
+                        style={{ width: `${(fileInfo.receivedChunks / fileInfo.totalChunks) * 100}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {/* Display received files */}
+            {files.length > 0 ? (
+              <ul className="mt-4 w-full">
+                {files.map((file, index) => (
+                  <li key={index} className="text-sm text-gray-700 mb-2">
+                    <button  onClick={() => downloadFile(file)} className="w-full cursor-pointer">
+                      <div className="flex justify-between items-center truncate hover:bg-indigo-50 py-2 px-4 rounded-xl transition-all duration-300 border-1 border-indigo-500 bg-indigo-300/20">
+                      <div className="flex items-center gap-2">
+                        <File size={16} /> 
+                        <span>{file.name} ({Math.round(file.size / 1024)} KB)</span>
+                      </div>
+                      <button 
+                        onClick={() => downloadFile(file)}
+                        className="text-blue-600 hover:text-blue-800"
+                      >
+                        <Download size={16} />
+                      </button>
+                    </div>
+                    </button>
+                    
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-gray-500 text-sm mt-2">No files received yet</p>
+            )}
+          </label>
+        </div>
       </div>
     </div>
   );

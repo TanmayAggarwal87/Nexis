@@ -20,7 +20,6 @@ function MainPage() {
     const savedSession = localStorage.getItem("sessionId");
     connectUser()
     if (savedSession) {
-      // Only join if we're not already connected
       if (!userConnected) {
         joinSession(Id);
       }

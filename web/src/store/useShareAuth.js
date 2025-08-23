@@ -3,23 +3,25 @@ import { io } from "socket.io-client";
 import { axiosInstance } from "../libs/axios.js";
 
 const BASE_URL = "http://localhost:4000/";
+const CHUNK_SIZE = 64 * 1024;
 
 export const useSessionStore = create((set, get) => ({
   userConnected: false,
   sessionId: null,
   socket: null,
-  status: "disconnected", // Add status tracking: disconnected, waiting, connected
+  files :[],
+  incomingFiles:{},
+  status: "disconnected",
 
   connectUser: async () => {
     try {
       const api = await axiosInstance.get("/create-session");
       const sessionId = api.data.sessionId;
-      console.log("Session created:", sessionId);
       set({ sessionId: sessionId, status: "waiting" });
       localStorage.setItem("sessionId", sessionId);
       get().connectSocket();
     } catch (err) {
-      console.log("Error creating session:", err);
+
     }
   },
 
@@ -34,54 +36,161 @@ export const useSessionStore = create((set, get) => ({
     });
 
     socket.on("connect", () => {
-      console.log("Socket connected:", socket.id);
       socket.emit("join-session", sessionId);
     });
 
     socket.on("waiting-for-peer", (data) => {
-      console.log("Waiting for another user to join...");
       set({ status: "waiting", userConnected: false });
     });
 
     socket.on("connection-established", (data) => {
-      console.log("Connection established with peer!");
       set({ userConnected: true, status: "connected" });
     });
 
+     socket.on("file-receiving-start", (data) => {
+      set((state) => ({
+        incomingFiles: {
+          ...state.incomingFiles,
+          [data.fileName]: {
+            fileName: data.fileName,
+            fileSize: data.fileSize,
+            fileType: data.fileType,
+            totalChunks: data.totalChunks,
+            receivedChunks: 0,
+            chunks: [],
+          },
+        },
+      }));
+    });
+
+    socket.on("file-receiving-chunk", (data) => {
+      const { fileName, chunkIndex, chunkData } = data;
+      set((state) => {
+        const fileInfo = state.incomingFiles[fileName];
+        if (!fileInfo) return state;
+
+        const binaryString = atob(chunkData);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+
+        const updatedChunks = [...fileInfo.chunks];
+        updatedChunks[chunkIndex] = bytes;
+
+        return {
+          incomingFiles: {
+            ...state.incomingFiles,
+            [fileName]: {
+              ...fileInfo,
+              receivedChunks: fileInfo.receivedChunks + 1,
+              chunks: updatedChunks,
+            },
+          },
+        };
+      });
+    });
+
+    socket.on("file-receiving-end", (data) => {
+      const { fileName, fileHash } = data;
+      set((state) => {
+        const fileInfo = state.incomingFiles[fileName];
+        if (!fileInfo) return state;
+
+        const totalSize = fileInfo.chunks.reduce((acc, chunk) => acc + chunk.length, 0);
+        const combined = new Uint8Array(totalSize);
+        let offset = 0;
+        
+        for (const chunk of fileInfo.chunks) {
+          combined.set(chunk, offset);
+          offset += chunk.length;
+        }
+
+        const file = new File([combined], fileName, {
+          type: fileInfo.fileType,
+          lastModified: Date.now(),
+        });
+
+        const { [fileName]: removed, ...remainingIncoming } = state.incomingFiles;
+        
+        return {
+          incomingFiles: remainingIncoming,
+          files: [...state.files, file],
+        };
+      });
+    });
+
     socket.on("joined-session", (data) => {
-      console.log("Joined session:", data.sessionId);
       set({ userConnected: true, status: "connected" });
     });
 
     socket.on("session-update", (data) => {
-      console.log("Updated members:", data.members);
     });
 
     socket.on("connect_error", (err) => {
-      console.log("Socket error:", err);
       set({ userConnected: false, status: "disconnected" });
     });
 
     socket.on("disconnect", (reason) => {
-      console.log("Socket disconnected:", reason);
-      set({ userConnected: false, status: "disconnected" });
+      set({ userConnected: false, status: "disconnected" , files:[]});
     });
 
     socket.on("error", (error) => {
-      console.log("Socket error:", error);
       set({ userConnected: false, status: "disconnected" });
     });
 
     set({ socket });
   },
 
+   sendFiles: async (files) => {
+    const { socket, sessionId } = get();
+    if (!socket || !sessionId) return;
+
+    for (const file of files) {
+      const arrayBuffer = await file.arrayBuffer();
+      const totalChunks = Math.ceil(arrayBuffer.byteLength / CHUNK_SIZE);
+      
+      socket.emit("share-files-start", {
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+        totalChunks,
+      });
+
+      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+        const start = chunkIndex * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, arrayBuffer.byteLength);
+        const chunk = arrayBuffer.slice(start, end);
+        const chunkData = btoa(
+          new Uint8Array(chunk).reduce(
+            (data, byte) => data + String.fromCharCode(byte),
+            ''
+          )
+        );
+
+        socket.emit("share-files-chunk", {
+          fileName: file.name,
+          chunkIndex,
+          chunkData,
+        });
+
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+
+      socket.emit("share-files-end", {
+        fileName: file.name,
+        fileHash: "placeholder-hash", 
+      });
+    }
+  },
+
+
   disconnectSocket: () => {
     const { socket } = get();
     if (socket?.connected) {
       socket.disconnect();
-      console.log("Socket disconnected manually");
     }
-    set({ socket: null, userConnected: false, status: "disconnected" });
+    set({ socket: null, userConnected: false, status: "disconnected", files:[] });
   },
 
   joinSession: async (joinSessionId) => {
@@ -92,12 +201,8 @@ export const useSessionStore = create((set, get) => ({
       
       const { sessionId } = get();
       
-      // Only join if it's a different session
       if(joinSessionId !== sessionId){
         const res = await axiosInstance.get(`/join/${joinSessionId}`);
-        console.log("Join session response:", res.data);
-        
-        // Clear current session and set new one
         if (get().socket?.connected) {
           get().socket.disconnect();
         }
@@ -114,38 +219,25 @@ export const useSessionStore = create((set, get) => ({
       }
       
     } catch (err) {
-      console.log("Error joining session:", err);
-      // Show error message to user instead of auto-creating
     }
   },
 
   closeSession: async () => {
     const { socket, sessionId } = get();
-    
-    console.log("Closing session:", sessionId);
 
-    // Clean up socket first
     if (socket?.connected) {
       socket.disconnect();
-      console.log("Socket disconnected");
     }
-    
-    // Delete old session from backend
     if (sessionId) {
       try {
         await axiosInstance.delete(`/delete-session/${sessionId}`);
-        console.log(`Session ${sessionId} deleted from backend`);
       } catch (err) {
         console.log("Error deleting session:", err);
       }
     }
     
-    // Clear old state
     localStorage.removeItem("sessionId");
-    set({ socket: null, userConnected: false, sessionId: null, status: "disconnected" });
-    
-    // Create NEW session
-    console.log("Creating new session via connectUser...");
+    set({ socket: null, userConnected: false, sessionId: null, status: "disconnected" , files:[]});
     get().connectUser();
   },
 }));
