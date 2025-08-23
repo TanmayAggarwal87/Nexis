@@ -1,7 +1,7 @@
 import axios from "axios";
 
 export const axiosInstance = axios.create({
-  baseURL: "http://localhost:4000",
+  baseURL: "https://nexis-production.up.railway.app",
   withCredentials: true,
 
 });

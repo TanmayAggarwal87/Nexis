@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { io } from "socket.io-client";
 import { axiosInstance } from "../libs/axios.js";
 
-const BASE_URL = "http://localhost:4000/";
+const BASE_URL = "https://nexis-production.up.railway.app/";
 const CHUNK_SIZE = 64 * 1024;
 
 export const useSessionStore = create((set, get) => ({

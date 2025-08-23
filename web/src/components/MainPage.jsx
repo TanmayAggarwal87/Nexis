@@ -48,7 +48,7 @@ function MainPage() {
       <div className="flex justify-center items-center  flex-col gap-2">
         <div id="qr" className="w-50  h-50 bg-black rounded-xl">
           <QRCodeSVG
-            value={`http://localhost:4000/join/${sessionId}`}
+            value={`https://nexis-production.up.railway.app/join/${sessionId}`}
             className="h-full w-full rounded-xl"
           />
         </div>
