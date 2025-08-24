@@ -1,10 +1,78 @@
-import React from "react";
-import { View, Text, TextInput, TouchableOpacity } from "react-native";
-import { ArrowRight, X } from "lucide-react-native";
+import React, { useEffect, useState } from "react";
+import { View, Text, TextInput, TouchableOpacity, Pressable, Alert, ActivityIndicator } from "react-native";
+import { ArrowRight, Camera, X } from "lucide-react-native";
 import QRCode from "react-native-qrcode-svg";
-import "./global.css"
+import { useSessionStore } from "../store/useShareStore";
+import { useCameraPermissions } from 'expo-camera';
+import { Link, useRouter } from "expo-router";
 
 export default function Index() {
+  const { 
+    connectUser, 
+    sessionId, 
+    joinSession, 
+    userConnected, 
+    status, 
+    peerConnected,
+    setSessionId
+  } = useSessionStore();
+  const [permission, requestPermission] = useCameraPermissions();
+  const router = useRouter();
+  const isPermissionGranted = Boolean(permission?.granted);
+  const [id, setId] = useState("");
+  const [isJoining, setIsJoining] = useState(false);
+  const [isJoiningSession, setIsJoiningSession] = useState(false);
+
+  useEffect(() => {
+    connectUser();
+  }, [connectUser]);
+
+  // Redirect to session page when joining a session and connected
+  // Redirect to session page when joining a session and connected
+useEffect(() => {
+  if (isJoiningSession && userConnected && sessionId) {
+    console.log("Redirecting to session:", sessionId);
+    router.replace(`/${sessionId}`);
+    setIsJoiningSession(false);
+  }
+}, [isJoiningSession, userConnected, sessionId, router]);
+
+// Also add this useEffect to handle the case where we're already connected
+useEffect(() => {
+  if (sessionId && userConnected && status === "connected") {
+    console.log("Already connected, redirecting to session:", sessionId);
+    router.replace(`/${sessionId}`);
+  }
+}, [sessionId, userConnected, status, router]);
+
+  const handleSession = async (joinSessionId: string) => {
+    if (!joinSessionId.trim()) {
+      Alert.alert("Error", "Please enter a valid connection code");
+      return;
+    }
+
+    setIsJoining(true);
+    setIsJoiningSession(true);
+    try {
+      await joinSession(joinSessionId);
+      // The useEffect above will handle the redirect once connected
+    } catch (error: any) {
+      Alert.alert("Error", error.message || "Failed to join session. Please check the code and try again.");
+      setIsJoiningSession(false);
+    } finally {
+      setIsJoining(false);
+    }
+  };
+
+  const handleCameraPermission = async () => {
+    if (!isPermissionGranted) {
+      const { granted } = await requestPermission();
+      if (!granted) {
+        Alert.alert("Permission Required", "Camera permission is needed to scan QR codes");
+      }
+    }
+  };
+
   return (
     <View className="flex-1 items-center justify-center px-4 bg-white">
       {/* Header */}
@@ -24,15 +92,22 @@ export default function Index() {
       {/* QR Section */}
       <View className="items-center gap-3">
         <View className="w-49 h-49 bg-black rounded-xl size-fit items-center justify-center">
-          <QRCode value="https://google.com" size={165} />
+          <QRCode value={sessionId || "default"} size={165} />
         </View>
 
         {/* Connection Code */}
         <View className="w-72 items-center">
           <Text className="text-gray-500 text-base mt-3">Your Connection code</Text>
           <View className="w-full items-center justify-center py-3 mt-2 rounded-lg border-2 border-gray-500">
-            <Text className="font-semibold tracking-widest text-xl">NEXIS-7429</Text>
+            <Text className="font-semibold tracking-widest text-xl">
+              {sessionId || "Generating..."}
+            </Text>
           </View>
+          {isJoiningSession && (
+            <Text className="text-sm text-blue-500 mt-1">
+              Joining session... {userConnected ? "Connected" : "Connecting"}
+            </Text>
+          )}
         </View>
 
         {/* Divider */}
@@ -49,15 +124,39 @@ export default function Index() {
           </Text>
           <View className="flex-row items-center mt-2">
             <TextInput
-              placeholder="Enter connection code or scan QR"
+              value={id}
+              onChangeText={setId}
+              placeholder="Enter connection code"
               placeholderTextColor="#9CA3AF"
               className="flex-1 h-14 px-4 rounded-lg border border-gray-300 text-gray-700 shadow-sm text-sm tracking-wide"
             />
-            <TouchableOpacity className="ml-3 h-14 w-14 items-center justify-center rounded-lg bg-indigo-500 shadow-md">
-              <ArrowRight size={20} color="white" />
+            <TouchableOpacity 
+              onPress={() => handleSession(id)} 
+              disabled={isJoining}
+              className="ml-3 h-14 w-14 items-center justify-center rounded-lg bg-indigo-500 shadow-md disabled:bg-gray-400"
+            >
+              {isJoining ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <ArrowRight size={20} color="white" />
+              )}
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* QR Scanner Button */}
+        <Pressable 
+          onPress={handleCameraPermission}
+          className={`mt-4 p-4 rounded-lg ${isPermissionGranted ? 'bg-indigo-500' : 'bg-gray-400'}`}
+          disabled={!isPermissionGranted}
+        >
+          <Link href="/scanner" asChild>
+            <Pressable className="flex-row items-center">
+              <Camera size={24} color="white" />
+              <Text className="text-white ml-2 font-semibold">Scan QR Code</Text>
+            </Pressable>
+          </Link>
+        </Pressable>
       </View>
     </View>
   );

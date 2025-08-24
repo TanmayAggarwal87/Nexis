@@ -5,7 +5,7 @@ import cors from "cors";
 
 
 app.use(cors({
-  origin: "https://nexis-share.netlify.app",//url update
+  origin: ["https://nexis-share.netlify.app","exp://rf303q0-anonymous-8081.exp.direct"],//url update
   credentials: true
 }));
 
