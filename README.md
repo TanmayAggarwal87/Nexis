@@ -1,6 +1,6 @@
 # Nexis
 
-Nexis is a full-stack project that brings together **web and mobile** clients with a common backend. The idea was simple: create a smooth file-sharing and session-based experience across platforms — and it turned into a project that taught me a ton about real-time systems.
+Nexis is a full-stack project that brings together **web and mobile** clients with a common backend. The idea was simple: create a smooth file-sharing and session-based experience across platforms and it turned into a project that taught me a ton about real-time systems.
 
 ---
 
@@ -49,8 +49,6 @@ It gave me a much clearer picture of how apps like file-sharing platforms or eve
 
 ## Future Plans
 
--Add better UI for progress indicators while transferring files
-
--Improve reconnection logic for unstable networks
-
--Explore peer-to-peer connections for faster transfers
+- Add better UI for progress indicators while transferring files
+- Improve reconnection logic for unstable networks
+- Explore peer-to-peer connections for faster transfers
