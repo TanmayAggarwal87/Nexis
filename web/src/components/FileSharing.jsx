@@ -92,7 +92,7 @@ function FileSharing() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mx-6 md:mx-[100px] mt-10">
         {/* Upload Section */}
         <div>
-          <label
+          <div
             {...getRootProps()}
             className="flex flex-col items-center justify-center h-[300px] w-full p-8 bg-white border-2 border-dashed border-gray-400 rounded-2xl cursor-pointer hover:border-gray-600 transition"
           >
@@ -107,7 +107,7 @@ function FileSharing() {
               type="file"
               className="hidden"
             />
-          </label>
+          </div>
 
           <ul className="mt-4">
             {acceptedFiles.map((file, index) => (
