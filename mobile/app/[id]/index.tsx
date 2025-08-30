@@ -1,34 +1,52 @@
-// Update your SessionPage component
 import React, { useState, useEffect } from "react";
-import { View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Platform, Linking } from "react-native";
-import { CloudUpload, Download, File, LogOut, Users, X, Send } from "lucide-react-native";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  Alert,
+  ActivityIndicator,
+  Platform,
+  Linking,
+} from "react-native";
+import {
+  CloudUpload,
+  Download,
+  File,
+  LogOut,
+  Users,
+  X,
+  Send,
+} from "lucide-react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSessionStore } from "../../store/useShareStore";
 import FilePicker from "../../components/FileSharing";
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
+import * as MediaLibrary from "expo-media-library";
 
 export default function SessionPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [sendingProgress, setSendingProgress] = useState<Record<string, number>>({});
-  
-  const { 
-    userConnected, 
-    files, 
-    incomingFiles, 
-    sendFiles, 
+  const [sendingProgress, setSendingProgress] = useState<
+    Record<string, number>
+  >({});
+
+  const {
+    userConnected,
+    files,
+    incomingFiles,
+    sendFiles,
     closeSession,
     peerConnected,
     sessionId,
     selectedFiles,
     setSelectedFiles,
     clearSelectedFiles,
-    removeSelectedFile
+    removeSelectedFile,
   } = useSessionStore();
-  
 
   useEffect(() => {
     if (sessionId && id !== sessionId) {
@@ -57,97 +75,101 @@ export default function SessionPage() {
     }
   };
 
-const handleSendFiles = async () => {
-  if (selectedFiles.length === 0) {
-    Alert.alert("No Files", "Please select files to send");
-    return;
-  }
+  const handleSendFiles = async () => {
+    if (selectedFiles.length === 0) {
+      Alert.alert("No Files", "Please select files to send");
+      return;
+    }
 
-  if (!userConnected || !peerConnected) {
-    Alert.alert("Not Connected", "Please wait for the connection to be established");
-    return;
-  }
+    if (!userConnected || !peerConnected) {
+      Alert.alert(
+        "Not Connected",
+        "Please wait for the connection to be established"
+      );
+      return;
+    }
 
-  setIsSending(true);
-  
-  // Initialize progress for all files
-  const initialProgress: Record<string, number> = {};
-  selectedFiles.forEach(file => {
-    initialProgress[file.name] = 0;
-  });
-  setSendingProgress(initialProgress);
+    setIsSending(true);
+    const initialProgress: Record<string, number> = {};
+    selectedFiles.forEach((file) => {
+      initialProgress[file.name] = 0;
+    });
+    setSendingProgress(initialProgress);
 
-  try {
-    // Prepare files for sending
-    const filesToSend = selectedFiles.map(file => ({
-      name: file.name,
-      size: file.size,
-      type: file.type || 'application/octet-stream',
-      uri: file.uri
-    }));
+    try {
+      const filesToSend = selectedFiles.map((file) => ({
+        name: file.name,
+        size: file.size,
+        type: file.type || "application/octet-stream",
+        uri: file.uri,
+      }));
 
-    await sendFiles(filesToSend);
-    clearSelectedFiles();
-    Alert.alert("Success", "Files sent successfully");
-  } catch (error) {
-    console.log("Error sending files:", error);
-    Alert.alert("Error", "Failed to send files");
-  } finally {
-    setIsSending(false);
-    setSendingProgress({});
-  }
-};
+      await sendFiles(filesToSend);
+      clearSelectedFiles();
+      Alert.alert("Success", "Files sent successfully");
+    } catch (error) {
+      console.log("Error sending files:", error);
+      Alert.alert("Error", "Failed to send files");
+    } finally {
+      setIsSending(false);
+      setSendingProgress({});
+    }
+  };
 
   const handleDownloadFile = async (file: any) => {
-  try {
-    // First check if sharing is available
-    if (!(await Sharing.isAvailableAsync())) {
-      Alert.alert("Error", "Sharing is not available on this device");
-      return;
-    }
+    try {
+      const timestamp = new Date().getTime();
+      const fileExtension = file.name.split(".").pop();
+      const baseName = file.name.replace(`.${fileExtension}`, "");
+      const fileName = `${baseName}_${timestamp}.${fileExtension}`;
 
-    // Check if file exists
-    const fileInfo = await FileSystem.getInfoAsync(file.uri);
-    if (!fileInfo.exists) {
-      Alert.alert("Error", "File not found");
-      return;
-    }
+      let fileUri;
 
-    // For some file types, we might need to create a copy with proper extension
-    let shareUri = file.uri;
-    
-    // If the file is in cache and doesn't have proper extension, create a copy
-    if (file.uri.startsWith(FileSystem.cacheDirectory)) {
-      const extension = file.name.split('.').pop();
-      const newUri = FileSystem.cacheDirectory + file.name;
-      
-      // Copy the file
-      await FileSystem.copyAsync({
-        from: file.uri,
-        to: newUri
-      });
-      
-      shareUri = newUri;
-    }
+      if (Platform.OS === "android") {
+        const externalDir = FileSystem.documentDirectory;
+        fileUri = externalDir + fileName;
 
-    // Share the file
-    await Sharing.shareAsync(shareUri, {
-      mimeType: file.type,
-      dialogTitle: `Share ${file.name}`,
-      UTI: file.type // iOS only
-    });
-    
-  } catch (error) {
-    console.log("Error downloading/sharing file:", error);
-    
-    // Simple fallback - just alert the user where the file is
-    Alert.alert(
-      "File Received", 
-      `File "${file.name}" has been received and is available in your app's cache.`,
-      [{ text: "OK" }]
-    );
-  }
-};
+        await FileSystem.copyAsync({
+          from: file.uri,
+          to: fileUri,
+        });
+
+        Alert.alert(
+          "File Saved",
+          `File "${file.name}" has been saved to your app's storage.\n\n${fileUri}`,
+          [
+            { text: "OK" },
+            {
+              text: "Open File",
+              onPress: () => {
+                Linking.openURL(fileUri).catch(() => {
+                  Alert.alert("Error", "No app available to open this file");
+                });
+              },
+            },
+          ]
+        );
+      } else {
+        const downloadDir = FileSystem.documentDirectory;
+        fileUri = downloadDir + fileName;
+
+        await FileSystem.copyAsync({
+          from: file.uri,
+          to: fileUri,
+        });
+        await Sharing.shareAsync(fileUri, {
+          mimeType: file.type,
+          dialogTitle: `Save ${file.name}`,
+          UTI: file.type,
+        });
+      }
+    } catch (error) {
+      console.log("Error saving file:", error);
+      Alert.alert("Error", "Failed to save file. Please try again.", [
+        { text: "OK" },
+      ]);
+    }
+  };
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return "0 Bytes";
@@ -164,14 +186,22 @@ const handleSendFiles = async () => {
         {/* Left */}
         <View className="flex-col gap-1">
           <View className="flex-row items-center">
-            <Text className="text-xl font-bold text-gray-900 tracking-wide">NE</Text>
+            <Text className="text-xl font-bold text-gray-900 tracking-wide">
+              NE
+            </Text>
             <X size={20} strokeWidth={5} color="#6366F1" />
-            <Text className="text-xl font-bold text-gray-900 tracking-wide">IS</Text>
+            <Text className="text-xl font-bold text-gray-900 tracking-wide">
+              IS
+            </Text>
           </View>
 
           <View className="flex-row gap-2 items-center">
-            <View className={`w-2 h-2 rounded-full ${userConnected ? 'bg-green-600' : 'bg-red-600'}`} />
-            <Text className={`text-xs ${userConnected ? 'text-green-600' : 'text-red-600'}`}>
+            <View
+              className={`w-2 h-2 rounded-full ${userConnected ? "bg-green-600" : "bg-red-600"}`}
+            />
+            <Text
+              className={`text-xs ${userConnected ? "text-green-600" : "text-red-600"}`}
+            >
               {userConnected ? "Connected" : "Disconnected"}
             </Text>
             <Text className="text-xs text-gray-400">• {sessionId || id}</Text>
@@ -187,7 +217,7 @@ const handleSendFiles = async () => {
             </Text>
           </View>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={handleDisconnect}
             disabled={isLoading}
             className="flex-row items-center gap-1 px-3 py-2 border border-gray-300 rounded-lg"
@@ -220,8 +250,8 @@ const handleSendFiles = async () => {
             disabled={isSending || !userConnected || !peerConnected}
             className={`flex-row items-center justify-center p-4 rounded-lg mb-6 ${
               isSending || !userConnected || !peerConnected
-                ? 'bg-gray-400'
-                : 'bg-indigo-500'
+                ? "bg-gray-400"
+                : "bg-indigo-500"
             }`}
           >
             {isSending ? (
@@ -230,7 +260,8 @@ const handleSendFiles = async () => {
               <>
                 <Send size={20} color="white" />
                 <Text className="text-white ml-2 font-semibold">
-                  Send {selectedFiles.length} File{selectedFiles.length !== 1 ? 's' : ''}
+                  Send {selectedFiles.length} File
+                  {selectedFiles.length !== 1 ? "s" : ""}
                 </Text>
               </>
             )}
@@ -240,11 +271,19 @@ const handleSendFiles = async () => {
         {/* Sending Progress */}
         {isSending && selectedFiles.length > 0 && (
           <View className="mb-6">
-            <Text className="text-lg font-semibold text-gray-800 mb-3">Sending Files</Text>
+            <Text className="text-lg font-semibold text-gray-800 mb-3">
+              Sending Files
+            </Text>
             {selectedFiles.map((file, index) => (
-              <View key={index} className="mb-3 p-3 bg-white rounded-lg border border-gray-200">
+              <View
+                key={index}
+                className="mb-3 p-3 bg-white rounded-lg border border-gray-200"
+              >
                 <View className="flex-row items-center justify-between mb-2">
-                  <Text className="text-sm font-medium text-gray-800" numberOfLines={1}>
+                  <Text
+                    className="text-sm font-medium text-gray-800"
+                    numberOfLines={1}
+                  >
                     {file.name}
                   </Text>
                   <Text className="text-xs text-gray-500">
@@ -252,8 +291,8 @@ const handleSendFiles = async () => {
                   </Text>
                 </View>
                 <View className="w-full bg-gray-200 rounded-full h-2">
-                  <View 
-                    className="bg-indigo-500 h-2 rounded-full" 
+                  <View
+                    className="bg-indigo-500 h-2 rounded-full"
                     style={{ width: `${sendingProgress[file.name] || 0}%` }}
                   />
                 </View>
@@ -265,7 +304,9 @@ const handleSendFiles = async () => {
         {/* Incoming Files Progress */}
         {Object.keys(incomingFiles).length > 0 && (
           <View className="mb-6">
-            <Text className="text-lg font-semibold text-gray-800 mb-3">Receiving Files</Text>
+            <Text className="text-lg font-semibold text-gray-800 mb-3">
+              Receiving Files
+            </Text>
             {Object.entries(incomingFiles).map(([fileName, fileInfo]) => (
               <View
                 key={fileName}
@@ -277,12 +318,15 @@ const handleSendFiles = async () => {
                     {fileName}
                   </Text>
                   <Text className="text-gray-600 text-sm">
-                    {formatFileSize(fileInfo.fileSize)} • {fileInfo.receivedChunks}/{fileInfo.totalChunks} chunks
+                    {formatFileSize(fileInfo.fileSize)} •{" "}
+                    {fileInfo.receivedChunks}/{fileInfo.totalChunks} chunks
                   </Text>
                   <View className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
-                    <View 
-                      className="bg-blue-500 h-1.5 rounded-full" 
-                      style={{ width: `${(fileInfo.receivedChunks / fileInfo.totalChunks) * 100}%` }}
+                    <View
+                      className="bg-blue-500 h-1.5 rounded-full"
+                      style={{
+                        width: `${(fileInfo.receivedChunks / fileInfo.totalChunks) * 100}%`,
+                      }}
                     />
                   </View>
                 </View>
@@ -294,7 +338,9 @@ const handleSendFiles = async () => {
         {/* Received Files Section */}
         {files.length > 0 && (
           <View className="mb-10">
-            <Text className="text-lg font-semibold text-gray-800 mb-3">Received Files ({files.length})</Text>
+            <Text className="text-lg font-semibold text-gray-800 mb-3">
+              Received Files ({files.length})
+            </Text>
             {files.map((file, index) => (
               <TouchableOpacity
                 key={index}
@@ -316,7 +362,6 @@ const handleSendFiles = async () => {
           </View>
         )}
       </View>
-      
     </ScrollView>
   );
 }

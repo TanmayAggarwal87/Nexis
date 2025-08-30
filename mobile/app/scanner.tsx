@@ -9,7 +9,7 @@ const scanner = () => {
     <SafeAreaView style={{ flex: 1 }}>
         {Platform.OS=="android"?<StatusBar hidden/>:null}
       <CameraView
-        style={{ flex: 1 }} // use flex instead of className
+        style={{ flex: 1 }}
         facing="back"
         onBarcodeScanned={({ data }) => {
           console.log("Scanned:", data);
@@ -20,4 +20,4 @@ const scanner = () => {
   )
 }
 
-export default scanner
+export default scanner;

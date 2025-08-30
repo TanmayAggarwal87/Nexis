@@ -3,9 +3,11 @@ import { io, Socket } from "socket.io-client";
 import { axiosInstance } from "../libs/axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { decode as atob, encode as btoa } from "base-64";
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from "expo-file-system";
+import * as MediaLibrary from "expo-media-library";
+import { Platform } from "react-native";
 
-const BASE_URL = "http://192.168.29.59:4000/";
+const BASE_URL = "http://192.168.x.x:4000/";
 const CHUNK_SIZE = 64 * 1024;
 
 interface FileInfo {
@@ -40,8 +42,6 @@ interface SessionState {
   setSelectedFiles: (files: any[]) => void;
   clearSelectedFiles: () => void;
   removeSelectedFile: (index: number) => void;
-  
-
 }
 
 export const useSessionStore = create<SessionState>((set, get) => ({
@@ -60,9 +60,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   setPeerConnected: (connected) => set({ peerConnected: connected }),
   setSelectedFiles: (files) => set({ selectedFiles: files }),
   clearSelectedFiles: () => set({ selectedFiles: [] }),
-  removeSelectedFile: (index) => set((state) => ({
-    selectedFiles: state.selectedFiles.filter((_, i) => i !== index)
-  })),
+  removeSelectedFile: (index) =>
+    set((state) => ({
+      selectedFiles: state.selectedFiles.filter((_, i) => i !== index),
+    })),
 
   connectUser: async () => {
     try {
@@ -99,10 +100,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
     socket.on("connection-established", (data) => {
       console.log("Connection established with peer");
-      set({ 
-        userConnected: true, 
-        status: "connected", 
-        peerConnected: true 
+      set({
+        userConnected: true,
+        status: "connected",
+        peerConnected: true,
       });
     });
 
@@ -151,85 +152,90 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       });
     });
 
-   socket.on("file-receiving-end", async (data) => {
-  const { fileName, fileHash } = data;
-  console.log("File receiving completed:", fileName);
-  
-  try {
-    const state = get();
-    const fileInfo = state.incomingFiles[fileName];
-    if (!fileInfo) {
-      console.error("File info not found for:", fileName);
-      return;
-    }
+    socket.on("file-receiving-end", async (data) => {
+      const { fileName, fileHash } = data;
+      console.log("File receiving completed:", fileName);
 
-    // Calculate total size and combine all chunks
-    const totalSize = fileInfo.chunks.reduce(
-      (acc, chunk) => acc + (chunk?.length || 0),
-      0
-    );
-    
-    if (totalSize === 0) {
-      console.error("No data received for file:", fileName);
-      return;
-    }
+      try {
+        const state = get();
+        const fileInfo = state.incomingFiles[fileName];
+        if (!fileInfo) {
+          console.error("File info not found for:", fileName);
+          return;
+        }
 
-    const combined = new Uint8Array(totalSize);
-    let offset = 0;
+        const totalSize = fileInfo.chunks.reduce(
+          (acc, chunk) => acc + (chunk?.length || 0),
+          0
+        );
 
-    for (const chunk of fileInfo.chunks) {
-      if (chunk) {
-        combined.set(chunk, offset);
-        offset += chunk.length;
+        if (totalSize === 0) {
+          console.error("No data received for file:", fileName);
+          return;
+        }
+
+        const combined = new Uint8Array(totalSize);
+        let offset = 0;
+
+        for (const chunk of fileInfo.chunks) {
+          if (chunk) {
+            combined.set(chunk, offset);
+            offset += chunk.length;
+          }
+        }
+
+        let fileUri;
+
+        if (Platform.OS === "android") {
+          fileUri = FileSystem.documentDirectory + fileName;
+        } else {
+          fileUri = FileSystem.documentDirectory + fileName;
+        }
+
+        let binary = "";
+        const bytes = new Uint8Array(combined);
+        const len = bytes.byteLength;
+
+        for (let i = 0; i < len; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+
+        const base64Data = btoa(binary);
+
+        await FileSystem.writeAsStringAsync(fileUri, base64Data, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+
+        console.log(
+          "File successfully received and saved:",
+          fileName,
+          "Size:",
+          fileInfo.fileSize,
+          "Location:",
+          fileUri
+        );
+
+        set((state) => {
+          const { [fileName]: removed, ...remainingIncoming } =
+            state.incomingFiles;
+          return {
+            incomingFiles: remainingIncoming,
+            files: [
+              ...state.files,
+              {
+                name: fileName,
+                type: fileInfo.fileType,
+                size: fileInfo.fileSize,
+                uri: fileUri,
+                lastModified: Date.now(),
+              },
+            ],
+          };
+        });
+      } catch (error) {
+        console.error("Error processing received file:", error);
       }
-    }
-
-    // Save the file as binary data instead of base64
-    const fileUri = FileSystem.cacheDirectory + fileName;
-    
-    // Convert Uint8Array to base64 properly
-    let binary = '';
-    const bytes = new Uint8Array(combined);
-    const len = bytes.byteLength;
-    
-    for (let i = 0; i < len; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    
-    const base64Data = btoa(binary);
-    
-    // Write the file with proper base64 encoding
-    await FileSystem.writeAsStringAsync(fileUri, base64Data, {
-      encoding: FileSystem.EncodingType.Base64,
     });
-
-    // Verify the file was written correctly
-    const fileInfoWritten = await FileSystem.getInfoAsync(fileUri);
-    if (!fileInfoWritten.exists) {
-      throw new Error("File was not written successfully");
-    }
-
-    console.log("File successfully received and saved:", fileName, "Size:", fileInfo.fileSize);
-
-    // Update state
-    set((state) => {
-      const { [fileName]: removed, ...remainingIncoming } = state.incomingFiles;
-      return {
-        incomingFiles: remainingIncoming,
-        files: [...state.files, {
-          name: fileName,
-          type: fileInfo.fileType,
-          size: fileInfo.fileSize,
-          uri: fileUri,
-          lastModified: Date.now(),
-        }],
-      };
-    });
-
-  } catch (error) {
-    console.error("Error processing received file:", error);
-  }
-});
 
     socket.on("joined-session", (data) => {
       console.log("Joined session successfully");
@@ -242,110 +248,121 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
     socket.on("connect_error", (err) => {
       console.log("Connection error:", err);
-      set({ userConnected: false, status: "disconnected", peerConnected: false });
+      set({
+        userConnected: false,
+        status: "disconnected",
+        peerConnected: false,
+      });
     });
 
     socket.on("disconnect", (reason) => {
       console.log("Socket disconnected:", reason);
-      set({ 
-        userConnected: false, 
-        status: "disconnected", 
+      set({
+        userConnected: false,
+        status: "disconnected",
         files: [],
-        peerConnected: false 
+        peerConnected: false,
       });
     });
 
     socket.on("error", (error) => {
       console.log("Socket error:", error);
-      set({ userConnected: false, status: "disconnected", peerConnected: false });
+      set({
+        userConnected: false,
+        status: "disconnected",
+        peerConnected: false,
+      });
     });
 
     set({ socket });
   },
 
   sendFiles: async (files) => {
-  const { socket, sessionId } = get();
-  if (!socket || !sessionId) {
-    console.log("Socket or session ID not available");
-    return;
-  }
+    const { socket, sessionId } = get();
+    if (!socket || !sessionId) {
+      console.log("Socket or session ID not available");
+      return;
+    }
 
-  for (const file of files) {
-    try {
-      console.log("Processing file:", file.name);
-      
-      // For React Native, read the file from the URI
-      const fileInfo = await FileSystem.getInfoAsync(file.uri);
-      if (!fileInfo.exists) {
-        console.error("File does not exist:", file.uri);
-        continue;
-      }
+    for (const file of files) {
+      try {
+        console.log("Processing file:", file.name);
 
-      // Read the file as base64
-      const base64Content = await FileSystem.readAsStringAsync(file.uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-
-      // Convert base64 to ArrayBuffer
-      const binaryString = atob(base64Content);
-      const arrayBuffer = new ArrayBuffer(binaryString.length);
-      const bytes = new Uint8Array(arrayBuffer);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-
-      const totalChunks = Math.ceil(arrayBuffer.byteLength / CHUNK_SIZE);
-      console.log(`Sending file: ${file.name}, size: ${file.size}, chunks: ${totalChunks}`);
-
-      // Emit start event
-      socket.emit("share-files-start", {
-        fileName: file.name,
-        fileSize: file.size,
-        fileType: file.type || 'application/octet-stream',
-        totalChunks,
-      });
-
-      // Send chunks
-      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
-        const start = chunkIndex * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, arrayBuffer.byteLength);
-        const chunk = arrayBuffer.slice(start, end);
-        
-        // Convert chunk to base64 for transmission
-        const chunkArray = new Uint8Array(chunk);
-        let binaryString = '';
-        for (let i = 0; i < chunkArray.byteLength; i++) {
-          binaryString += String.fromCharCode(chunkArray[i]);
+        const fileInfo = await FileSystem.getInfoAsync(file.uri);
+        if (!fileInfo.exists) {
+          console.error("File does not exist:", file.uri);
+          continue;
         }
-        const chunkData = btoa(binaryString);
 
-        socket.emit("share-files-chunk", {
-          fileName: file.name,
-          chunkIndex,
-          chunkData,
+        const base64Content = await FileSystem.readAsStringAsync(file.uri, {
+          encoding: FileSystem.EncodingType.Base64,
         });
 
-        // Update progress (optional)
-        const progress = Math.round((chunkIndex + 1) / totalChunks * 100);
-        console.log(`File ${file.name} progress: ${progress}%`);
+        const binaryString = atob(base64Content);
+        const arrayBuffer = new ArrayBuffer(binaryString.length);
+        const bytes = new Uint8Array(arrayBuffer);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
 
-        // Add a small delay between chunks to avoid overwhelming the connection
-        await new Promise((resolve) => setTimeout(resolve, 10));
+        const totalChunks = Math.ceil(arrayBuffer.byteLength / CHUNK_SIZE);
+
+        let fileType = file.type || "application/octet-stream";
+        const extension = file.name.split(".").pop()?.toLowerCase();
+
+        if (extension === "pdf") {
+          fileType = "application/pdf";
+        } else if (extension === "jpg" || extension === "jpeg") {
+          fileType = "image/jpeg";
+        } else if (extension === "png") {
+          fileType = "image/png";
+        } else if (extension === "doc" || extension === "docx") {
+          fileType = "application/msword";
+        }
+
+        console.log(
+          `Sending file: ${file.name}, type: ${fileType}, size: ${file.size}, chunks: ${totalChunks}`
+        );
+
+        socket.emit("share-files-start", {
+          fileName: file.name,
+          fileSize: file.size,
+          fileType: fileType,
+          totalChunks,
+        });
+
+        for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+          const start = chunkIndex * CHUNK_SIZE;
+          const end = Math.min(start + CHUNK_SIZE, arrayBuffer.byteLength);
+          const chunk = arrayBuffer.slice(start, end);
+
+          const chunkArray = new Uint8Array(chunk);
+          let binaryString = "";
+          for (let i = 0; i < chunkArray.byteLength; i++) {
+            binaryString += String.fromCharCode(chunkArray[i]);
+          }
+          const chunkData = btoa(binaryString);
+
+          socket.emit("share-files-chunk", {
+            fileName: file.name,
+            chunkIndex,
+            chunkData,
+          });
+
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+
+        socket.emit("share-files-end", {
+          fileName: file.name,
+          fileHash: "placeholder-hash",
+        });
+
+        console.log(`File ${file.name} sent successfully`);
+      } catch (error) {
+        console.error(`Error sending file ${file.name}:`, error);
       }
-
-      // Emit end event
-      socket.emit("share-files-end", {
-        fileName: file.name,
-        fileHash: "placeholder-hash",
-      });
-
-      console.log(`File ${file.name} sent successfully`);
-
-    } catch (error) {
-      console.error(`Error sending file ${file.name}:`, error);
     }
-  }
-},
+  },
 
   disconnectSocket: () => {
     const { socket } = get();
@@ -362,46 +379,40 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   joinSession: async (joinSessionId) => {
-  try {
-    if (!joinSessionId || joinSessionId.trim() === "") {
-      throw new Error("Invalid session ID");
+    try {
+      if (!joinSessionId || joinSessionId.trim() === "") {
+        throw new Error("Invalid session ID");
+      }
+
+      const { sessionId: currentSessionId, socket: currentSocket } = get();
+
+      if (joinSessionId === currentSessionId && currentSocket?.connected) {
+        return;
+      }
+
+      const res = await axiosInstance.get(`/join/${joinSessionId}`);
+
+      if (currentSocket?.connected) {
+        currentSocket.disconnect();
+      }
+      set({
+        sessionId: joinSessionId,
+        userConnected: false,
+        status: "waiting",
+        socket: null,
+        peerConnected: false,
+        files: [],
+        incomingFiles: {},
+      });
+
+      await AsyncStorage.setItem("sessionId", joinSessionId);
+
+      get().connectSocket();
+    } catch (err: any) {
+      console.log("Error joining session:", err);
+      throw new Error(err.response?.data?.message || "Failed to join session");
     }
-
-    const { sessionId: currentSessionId, socket: currentSocket } = get();
-
-    // If we're already in this session, do nothing
-    if (joinSessionId === currentSessionId && currentSocket?.connected) {
-      return;
-    }
-
-    // First, check if the session exists
-    const res = await axiosInstance.get(`/join/${joinSessionId}`);
-    
-    // Disconnect current socket if connected
-    if (currentSocket?.connected) {
-      currentSocket.disconnect();
-    }
-
-    // Reset state and set new session ID
-    set({
-      sessionId: joinSessionId,
-      userConnected: false,
-      status: "waiting",
-      socket: null,
-      peerConnected: false,
-      files: [],
-      incomingFiles: {},
-    });
-
-    await AsyncStorage.setItem("sessionId", joinSessionId);
-    
-    // Connect to the new session
-    get().connectSocket();
-  } catch (err: any) {
-    console.log("Error joining session:", err);
-    throw new Error(err.response?.data?.message || "Failed to join session");
-  }
-},
+  },
 
   closeSession: async () => {
     const { socket, sessionId } = get();
